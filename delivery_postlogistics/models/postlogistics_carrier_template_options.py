@@ -30,15 +30,7 @@ class DeliveryCarrierTemplateOption(models.Model):
     )
     # relation tables to manage compatiblity between basic services
     # and other services
-    postlogistics_basic_service_ids = fields.Many2many(
-        comodel_name="postlogistics.delivery.carrier.template.option",
-        relation="postlogistics_compatibility_service_rel",
-        column1="service_id",
-        column2="basic_service_id",
-        string="Basic Services",
-        domain=[("postlogistics_type", "=", "basic")],
-        help="List of basic service for which this service is compatible",
-    )
+
     postlogistics_additonial_service_ids = fields.Many2many(
         comodel_name="postlogistics.delivery.carrier.template.option",
         relation="postlogistics_compatibility_service_rel",

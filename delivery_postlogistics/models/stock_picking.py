@@ -11,10 +11,6 @@ from ..postlogistics.web_service import PostlogisticsWebService
 class StockPicking(models.Model):
     _inherit = "stock.picking"
 
-    postlogistics_option_ids = fields.Many2many(
-        comodel_name="postlogistics.delivery.carrier.option", string="Options"
-    )
-
     delivery_fixed_date = fields.Date(
         "Fixed delivery date", help="Specific delivery date (ZAW3217)"
     )
@@ -28,6 +24,17 @@ class StockPicking(models.Model):
         "Mobile", help="For notify delivery by telephone (ZAW3213)"
     )
 
+    def _get_picking_postlogistic_packaging(self):
+        """
+        Get all the picking postlogistics service codes define in the picking
+        """
+        self.ensure_one()
+        postlogistics_packages = self._get_packages_from_picking().filtered(
+            lambda r: r.packaging_id
+            and r.packaging_id.package_carrier_type == "postlogistics"
+        )
+        return postlogistics_packages.mapped("packaging_id")
+
     @api.onchange("carrier_id")
     def onchange_carrier_id(self):
         """ Inherit this method in your module """
@@ -40,73 +47,6 @@ class StockPicking(models.Model):
         # depending of the type or the code
         carrier = self.carrier_id
         self.update({"delivery_type": carrier.delivery_type})
-        default_options = carrier.default_options()
-        self.postlogistics_option_ids = default_options
-        result = {
-            "domain": {
-                "postlogistics_option_ids": [
-                    ("id", "in", carrier.postlogistics_available_option_ids.ids)
-                ]
-            }
-        }
-        return result
-
-    @api.onchange("postlogistics_option_ids")
-    def onchange_postlogistics_option_ids(self):
-        if not self.carrier_id:
-            return
-        carrier = self.carrier_id
-        for available_option in carrier.postlogistics_available_option_ids:
-            if (
-                available_option.mandatory
-                and available_option not in self.postlogistics_option_ids
-            ):
-                # XXX the client does not allow to modify the field that
-                # triggered the onchange:
-                # https://github.com/odoo/odoo/issues/2693#issuecomment-56825399
-                # Ideally we should add the missing option
-                raise exceptions.UserError(
-                    _(
-                        "You should not remove a mandatory option."
-                        "Please cancel the edit or "
-                        "add back the option: %s."
-                    )
-                    % available_option.name
-                )
-
-    @api.model
-    def _values_with_carrier_options(self, values):
-        values = values.copy()
-        carrier_id = values.get("carrier_id")
-        option_ids = values.get("postlogistics_option_ids")
-        if carrier_id and not option_ids:
-            carrier_obj = self.env["delivery.carrier"]
-            carrier = carrier_obj.browse(carrier_id)
-            default_options = carrier.default_options()
-            if default_options:
-                values.update(postlogistics_option_ids=[(6, 0, default_options.ids)])
-        return values
-
-    def write(self, vals):
-        """ Set the default options when the delivery method is changed.
-
-        So we are sure that the options are always in line with the
-        current delivery method.
-
-        """
-        vals = self._values_with_carrier_options(vals)
-        return super().write(vals)
-
-    @api.model
-    def create(self, vals):
-        """ Trigger onchange_carrier_id on create
-
-        To ensure options are setted on the basis of carrier_id copied from
-        Sale order or defined by default.
-
-        """
-        vals = self._values_with_carrier_options(vals)
-        return super().create(vals)
 
     def _get_packages_from_picking(self):
         """ Get all the packages from the picking """
@@ -167,25 +107,17 @@ class StockPicking(models.Model):
                 lambda s: not (s.package_id or s.result_package_id)
             )
             if move_lines:
-                package = self.env["stock.quant.package"].create({})
+                default_packaging = (
+                    picking.carrier_id.postlogistics_default_packaging_id
+                )
+                package = self.env["stock.quant.package"].create(
+                    {
+                        "packaging_id": default_packaging
+                        and default_packaging.id
+                        or False
+                    }
+                )
                 move_lines.write({"result_package_id": package.id})
-
-    def send_to_shipper(self):
-        super().send_to_shipper()
-        if self.delivery_type == "postlogistics":
-            self.postlogistics_send_shipping()
-
-    def postlogistics_send_shipping(self):
-        """
-        It will generate the labels for all the packages of the picking.
-        Packages are mandatory in this case
-        """
-        for pick in self:
-            pick._set_a_default_package()
-            shipping_labels = pick._generate_postlogistics_label()
-            for label in shipping_labels:
-                pick.attach_shipping_label(label)
-        return True
 
     def postlogistics_cod_amount(self):
         """ Return the Postlogistic Cash on Delivery amount of a picking

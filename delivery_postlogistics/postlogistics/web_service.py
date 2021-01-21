@@ -87,11 +87,14 @@ class PostlogisticsWebService(object):
 
         # Phone and / or mobile should only be displayed if instruction to
         # Notify delivery by telephone is set
+
+        picking_packagings = picking._get_picking_postlogistic_packaging()
         is_phone_required = [
-            option
-            for option in picking.postlogistics_option_ids
-            if option.code == "ZAW3213"
+            packaging
+            for packaging in picking_packagings
+            if packaging.postlogistics_option_code == "ZAW3213"
         ]
+
         if is_phone_required:
             phone = picking.delivery_phone or partner.phone
             if phone:
@@ -131,32 +134,23 @@ class PostlogisticsWebService(object):
             customer["logoFormat"] = logo_format
         return customer
 
-    def _get_single_option(self, picking, option):
-        option = [
-            opt.code
-            for opt in picking.postlogistics_option_ids
-            if opt.postlogistics_type == option
-        ]
-        assert len(option) <= 1
-        return option and option[0]
-
     def _get_label_layout(self, picking):
-        label_layout = self._get_single_option(picking, "label_layout")
-        if not label_layout:
-            label_layout = picking.carrier_id.postlogistics_label_layout.code
-        return label_layout
+        """
+        Get Label layout define in carrier
+        """
+        return picking.carrier_id.postlogistics_label_layout.code
 
     def _get_output_format(self, picking):
-        output_format = self._get_single_option(picking, "output_format")
-        if not output_format:
-            output_format = picking.carrier_id.postlogistics_output_format.code
-        return output_format
+        """
+        Get Output format define in carrier
+        """
+        return picking.carrier_id.postlogistics_output_format.code
 
     def _get_image_resolution(self, picking):
-        resolution = self._get_single_option(picking, "resolution")
-        if not resolution:
-            resolution = picking.carrier_id.postlogistics_resolution.code
-        return resolution
+        """
+        Get Output Resolution Code define in carrier
+        """
+        return picking.carrier_id.postlogistics_resolution.code
 
     def _get_license(self, picking):
         """ Get the license
@@ -169,27 +163,27 @@ class PostlogisticsWebService(object):
         return franking_license.number
 
     def _prepare_attributes(self, picking, pack_num=None, pack_total=None):
-
+        postlogistics_packagings = picking._get_picking_postlogistic_packaging()
         services = [
-            code
-            for codes in (
-                option.code.split(",")
-                for option in picking.postlogistics_option_ids
-                if option.tmpl_option_id.postlogistics_type
-                in ("basic", "additional", "delivery")
-            )
-            for code in codes
+            packaging.shipper_package_code
+            for packaging in postlogistics_packagings
+            if packaging.shipper_package_code
         ]
+
         if not services:
             raise exceptions.UserError(
-                _("Missing required delivery option on picking.")
+                _("No Postlogistics packaging services found in this picking.")
             )
 
         attributes = {
             "przl": services,
             "weight": picking.shipping_weight,
         }
-        option_codes = [option.code for option in picking.postlogistics_option_ids]
+        option_codes = [
+            packaging.postlogistics_option_code
+            for packaging in postlogistics_packagings
+        ]
+
         if "ZAW3217" in option_codes and picking.delivery_fixed_date:
             attributes["deliveryDate"] = picking.delivery_fixed_date
         if "ZAW3218" in option_codes and pack_num:
@@ -232,7 +226,11 @@ class PostlogisticsWebService(object):
 
     def _get_item_additional_data(self, picking, package=None):
         result = []
-        if set(picking.postlogistics_option_ids.mapped("code")) & {"BLN", "N"}:
+        postlogistics_packaging = picking._get_picking_postlogistic_packaging()
+        postlogistics_package_codes = postlogistics_packaging.mapped(
+            "postlogistics_option_code"
+        )
+        if set(postlogistics_package_codes) & {"BLN", "N"}:
             cod_attributes = self._cash_on_delivery(picking, package=package)
             result += cod_attributes
         return result

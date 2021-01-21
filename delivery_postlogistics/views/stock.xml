@@ -7,10 +7,6 @@
         <field name="inherit_id" ref="delivery.view_picking_withcarrier_out_form" />
         <field name="arch" type="xml">
             <xpath expr="//page//group[@name='carrier_data']/.." position="after">
-                <field
-                    name="postlogistics_option_ids"
-                    domain="[('carrier_id', '=', carrier_id)]"
-                />
                 <separator
                     string="Delivery instructions"
                     attrs="{'invisible': [('delivery_type', '!=', 'postlogistics')]}"

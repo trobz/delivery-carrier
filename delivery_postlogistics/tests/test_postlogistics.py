@@ -30,7 +30,6 @@ class TestPostlogistics(common.SavepointCase):
         cls.env["postlogistics.license"].create({"name": "TEST", "number": LICENSE})
         Product = cls.env["product.product"]
         partner_id = cls.env.ref("delivery_postlogistics.partner_postlogistics").id
-
         OptionTmpl = cls.env["postlogistics.delivery.carrier.template.option"]
         label_layout = OptionTmpl.create({"code": "A6", "partner_id": partner_id})
         output_format = OptionTmpl.create({"code": "PDF", "partner_id": partner_id})
@@ -50,16 +49,12 @@ class TestPostlogistics(common.SavepointCase):
             }
         )
 
-        service_opt_tmpl = OptionTmpl.create({"code": "PRI"})
-
-        Option = cls.env["postlogistics.delivery.carrier.option"]
-        service_opt = Option.create(
+        # Create Product packaging
+        postlogistics_pd_packaging = cls.env["product.packaging"].create(
             {
-                "code": "PRI",
                 "name": "PRI-TEST",
-                "partner_id": partner_id,
-                "postlogistics_type": "basic",
-                "tmpl_option_id": service_opt_tmpl.id,
+                "package_carrier_type": "postlogistics",
+                "shipper_package_code": "PRI",
             }
         )
 
@@ -67,40 +62,7 @@ class TestPostlogistics(common.SavepointCase):
             {"street": "Rue de Lausanne 1", "zip": "1030", "city": "Bussigny"}
         )
         cls.env.user.company_id.partner_id.country_id = cls.env.ref("base.ch")
-        stock_location = cls.env.ref("stock.stock_location_stock")
-        customer_location = cls.env.ref("stock.stock_location_customers")
-        Picking = cls.env["stock.picking"]
-        recipient = cls.env["res.partner"].create(
-            {
-                "name": "Camptocamp SA",
-                "street": "EPFL Innovation Park, Bât A",
-                "zip": "1015",
-                "city": "Lausanne",
-            }
-        )
-        cls.picking = Picking.create(
-            {
-                "partner_id": recipient.id,
-                "carrier_id": cls.carrier.id,
-                "picking_type_id": cls.env.ref("stock.picking_type_out").id,
-                "location_id": stock_location.id,
-                "location_dest_id": customer_location.id,
-                "postlogistics_option_ids": [(4, service_opt.id, 0)],
-            }
-        )
-        product = Product.create({"name": "Product A"})
-
-        cls.env["stock.move"].create(
-            {
-                "name": "a move",
-                "product_id": product.id,
-                "product_uom_qty": 3.0,
-                "product_uom": product.uom_id.id,
-                "picking_id": cls.picking.id,
-                "location_id": stock_location.id,
-                "location_dest_id": customer_location.id,
-            }
-        )
+        cls.picking = cls.create_picking(cls, postlogistics_pd_packaging)
         cls.env.user.lang = "en_US"
 
     def test_store_label(self):
@@ -118,3 +80,47 @@ class TestPostlogistics(common.SavepointCase):
         with recorder.use_cassette("test_missing_language") as cassette:
             self.picking._generate_postlogistics_label()
             self.assertEqual(len(cassette.requests), 2)
+
+    def create_picking(self, prod_packaging):
+        Product = self.env["product.product"]
+        stock_location = self.env.ref("stock.stock_location_stock")
+        customer_location = self.env.ref("stock.stock_location_customers")
+        Picking = self.env["stock.picking"]
+        recipient = self.env["res.partner"].create(
+            {
+                "name": "Camptocamp SA",
+                "street": "EPFL Innovation Park, Bât A",
+                "zip": "1015",
+                "city": "Lausanne",
+            }
+        )
+        picking = Picking.create(
+            {
+                "partner_id": recipient.id,
+                "carrier_id": self.carrier.id,
+                "picking_type_id": self.env.ref("stock.picking_type_out").id,
+                "location_id": stock_location.id,
+                "location_dest_id": customer_location.id,
+            }
+        )
+        product = Product.create({"name": "Product A"})
+
+        self.env["stock.move"].create(
+            {
+                "name": "a move",
+                "product_id": product.id,
+                "product_uom_qty": 3.0,
+                "product_uom": product.uom_id.id,
+                "picking_id": picking.id,
+                "location_id": stock_location.id,
+                "location_dest_id": customer_location.id,
+            }
+        )
+
+        # Add to the packages
+        choose_delivery_package_wizard = self.env["choose.delivery.package"].create(
+            {"picking_id": picking.id, "delivery_packaging_id": prod_packaging.id}
+        )
+        picking.action_assign()
+        choose_delivery_package_wizard.put_in_pack()
+        return picking

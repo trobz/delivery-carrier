@@ -16,6 +16,7 @@
         "data/product.xml",
         "data/delivery.xml",
         "views/delivery.xml",
+        "views/product_packaging_view.xml",
         "views/postlogistics_license.xml",
         "views/stock.xml",
         "security/ir.model.access.csv",
