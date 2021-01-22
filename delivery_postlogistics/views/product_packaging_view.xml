@@ -11,7 +11,7 @@
             <field name="shipper_package_code" position="after">
                 <field
                     name="postlogistics_option_code"
-                    attrs="{'invisible': [('package_carrier_type', '!=', 'postlogistics')], 'required': [('package_carrier_type', '=', 'postlogistics')]}"
+                    attrs="{'invisible': [('package_carrier_type', '!=', 'postlogistics')]}"
                 />
             </field>
         </field>

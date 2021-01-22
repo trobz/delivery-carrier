@@ -173,25 +173,18 @@ class PostlogisticsWebService(object):
     def _prepare_attributes(
         self, picking, package=None, pack_num=None, pack_total=None
     ):
-        services = []
-        if package:
-            postlogistics_packagings = package.mapped("packaging_id")
-            services = [
-                packaging.shipper_package_code
-                for packaging in postlogistics_packagings
-                if packaging.shipper_package_code
-            ]
-            # Total weight of the packages in grams (Odoo defined in kg)
-            total_weight = package.shipping_weight
-            total_weight *= 1000
-        else:
-            # packaging will be the one defined in carrier
-            packaging = picking.carrier_id.postlogistics_default_packaging_id
-            if packaging.shipper_package_code:
-                services = [packaging.shipper_package_code]
-            # Weight = shipping weight on picking
-            total_weight = picking.shipping_weight
-            total_weight *= 1000
+        packaging = (
+            package
+            and package.packaging_id
+            or picking.carrier_id.postlogistics_default_packaging_id
+        )
+        services = (
+            packaging.shipper_package_code
+            and packaging.shipper_package_code.split(",")
+            or []
+        )
+        total_weight = package.shipping_weight if package else picking.shipping_weight
+        total_weight *= 1000
 
         if not services:
             raise exceptions.UserError(
@@ -202,21 +195,18 @@ class PostlogisticsWebService(object):
             "przl": services,
             "weight": total_weight,
         }
-        option_codes = [
-            packaging.postlogistics_option_code
-            for packaging in postlogistics_packagings
-        ]
+        option_code = packaging.postlogistics_option_code
 
-        if "ZAW3217" in option_codes and picking.delivery_fixed_date:
+        if option_code == "ZAW3217" and picking.delivery_fixed_date:
             attributes["deliveryDate"] = picking.delivery_fixed_date
-        if "ZAW3218" in option_codes and pack_num:
+        if option_code == "ZAW3218" and pack_num:
             attributes.update(
                 {
                     "parcelTotal": pack_total or len(picking.package_ids),
                     "parcelNo": pack_num,
                 }
             )
-        if "ZAW3219" in option_codes and picking.delivery_place:
+        if option_code == "ZAW3219" and picking.delivery_place:
             attributes["deliveryPlace"] = picking.delivery_place
         if picking.carrier_id.postlogistics_proclima_logo:
             attributes["proClima"] = True
