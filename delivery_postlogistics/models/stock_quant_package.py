@@ -11,6 +11,8 @@ class StockQuantPackage(models.Model):
         help="If the cash on delivery amount for this package is different "
         "than the total of the sales order, write the amount there.",
     )
+    parcel_tracking = fields.Char("Parcel Tracking")
+    package_carrier_type = fields.Selection(related="packaging_id.package_carrier_type")
 
     @api.returns("stock.picking")
     def _get_origin_pickings(self):

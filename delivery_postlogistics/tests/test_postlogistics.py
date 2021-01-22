@@ -67,7 +67,7 @@ class TestPostlogistics(common.SavepointCase):
 
     def test_store_label(self):
         with recorder.use_cassette("test_store_label") as cassette:
-            res = self.picking._generate_postlogistics_label()
+            res = self.picking._generate_postlogistics_label(skip_attach_file=True)
             self.assertEqual(len(cassette.requests), 2)
         ref = "996001321700005959"
         self.assertEqual(res[0]["file_type"], "pdf")
@@ -78,7 +78,7 @@ class TestPostlogistics(common.SavepointCase):
     def test_missing_language(self):
         self.env.user.lang = False
         with recorder.use_cassette("test_missing_language") as cassette:
-            self.picking._generate_postlogistics_label()
+            self.picking._generate_postlogistics_label(skip_attach_file=True)
             self.assertEqual(len(cassette.requests), 2)
 
     def create_picking(self, prod_packaging):

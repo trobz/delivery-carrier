@@ -176,7 +176,6 @@ class StockPicking(models.Model):
             info = info_from_label(label)
             info["package_id"] = False
             labels.append(info)
-            return labels
 
         tracking_refs = []
         for package in packages:
@@ -188,14 +187,21 @@ class StockPicking(models.Model):
                     package.parcel_tracking = tracking_number
                     tracking_refs.append(tracking_number)
                     break
-            info = info_from_label(label)
-            info["package_id"] = package.id
-            labels.append(info)
+            if label:
+                info = info_from_label(label)
+                info["package_id"] = package.id
+                info["tracking_number"] = label["tracking_number"]
+                labels.append(info)
 
-        self.carrier_tracking_ref = "; ".join(tracking_refs)
+        existing_tracking_ref = (
+            self.carrier_tracking_ref and self.carrier_tracking_ref.split("; ") or []
+        )
+        self.carrier_tracking_ref = "; ".join(existing_tracking_ref + tracking_refs)
         return labels
 
-    def _generate_postlogistics_label(self, webservice_class=None, package_ids=None):
+    def _generate_postlogistics_label(
+        self, webservice_class=None, package_ids=None, skip_attach_file=False
+    ):
         """ Generate labels and write tracking numbers received """
         self.ensure_one()
         user = self.env.user
@@ -212,12 +218,41 @@ class StockPicking(models.Model):
             packages = package_obj.browse(package_ids)
 
         web_service = webservice_class(company)
-        label_result = web_service.generate_label(self, packages, user_lang=user.lang)
 
-        if "errors" in label_result:
-            raise exceptions.Warning("\n".join(label_result["errors"]))
+        # Do not generate label for packages that has already done
+        todo_packages = []
+        for package in packages:
+            if not package.parcel_tracking:
+                todo_packages.append(package)
 
-        labels = self.write_tracking_number_label(label_result, packages)
+        label_results = web_service.generate_label(
+            self, todo_packages, user_lang=user.lang
+        )
+
+        # Process the success packages first
+        success_label_results = [
+            label for label in label_results if "errors" not in label
+        ]
+        failed_label_results = [label for label in label_results if "errors" in label]
+
+        # Case when there is a failed label, rollback odoo data
+        if failed_label_results:
+            self._cr.rollback()
+
+        labels = []
+        for label_result in success_label_results:
+            labels += self.write_tracking_number_label(label_result, packages)
+
+        if not skip_attach_file:
+            for label in labels:
+                self.attach_shipping_label(label)
+
+        if failed_label_results:
+            # Commit the change to save the changes,
+            # This ensures the label pushed recored correctly in Odoo
+            self._cr.commit()
+            error_message = "\n".join(label["errors"] for label in failed_label_results)
+            raise exceptions.Warning(error_message)
         return labels
 
     def generate_postlogistics_shipping_labels(self, package_ids=None):

@@ -16,6 +16,7 @@
         "data/product.xml",
         "data/delivery.xml",
         "views/delivery.xml",
+        "views/stock_quant_package_view.xml",
         "views/product_packaging_view.xml",
         "views/postlogistics_license.xml",
         "views/stock.xml",

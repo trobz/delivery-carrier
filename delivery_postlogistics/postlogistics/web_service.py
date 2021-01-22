@@ -170,25 +170,34 @@ class PostlogisticsWebService(object):
         franking_license = picking.carrier_id.postlogistics_license_id
         return franking_license.number
 
-    def _prepare_attributes(self, picking, pack_num=None, pack_total=None):
-        postlogistics_packages = picking._get_picking_postlogistic_packages()
-        postlogistics_packagings = postlogistics_packages.mapped("packaging_id")
-        services = [
-            packaging.shipper_package_code
-            for packaging in postlogistics_packagings
-            if packaging.shipper_package_code
-        ]
+    def _prepare_attributes(
+        self, picking, package=None, pack_num=None, pack_total=None
+    ):
+        services = []
+        if package:
+            postlogistics_packagings = package.mapped("packaging_id")
+            services = [
+                packaging.shipper_package_code
+                for packaging in postlogistics_packagings
+                if packaging.shipper_package_code
+            ]
+            # Total weight of the packages in grams (Odoo defined in kg)
+            total_weight = package.shipping_weight
+            total_weight *= 1000
+        else:
+            # packaging will be the one defined in carrier
+            packaging = picking.carrier_id.postlogistics_default_packaging_id
+            if packaging.shipper_package_code:
+                services = [packaging.shipper_package_code]
+            # Weight = shipping weight on picking
+            total_weight = picking.shipping_weight
+            total_weight *= 1000
 
         if not services:
             raise exceptions.UserError(
                 _("No Postlogistics packaging services found in this picking.")
             )
 
-        # Total weight of the packages in grams (Odoo defined in kg)
-        total_weight = sum(
-            [package.shipping_weight for package in postlogistics_packages]
-        )
-        total_weight *= 1000
         attributes = {
             "przl": services,
             "weight": total_weight,
@@ -296,13 +305,15 @@ class PostlogisticsWebService(object):
         if not packages:
             attributes = self._prepare_attributes(picking)
             add_item()
+            return item_list
 
         pack_total = len(packages)
         for pack in packages:
-            attributes = self._prepare_attributes(picking, pack_counter, pack_total)
+            attributes = self._prepare_attributes(
+                picking, pack, pack_counter, pack_total
+            )
             add_item(package=pack)
             pack_counter += 1
-
         return item_list
 
     def _prepare_label_definition(self, picking):
@@ -435,6 +446,7 @@ class PostlogisticsWebService(object):
         }
 
         """
+        results = []
         picking_carrier = picking.carrier_id
         access_token = self.get_access_token(picking_carrier)
 
@@ -448,62 +460,57 @@ class PostlogisticsWebService(object):
         labelDefinition = self._prepare_label_definition(picking)
         frankingLicense = self._get_license(picking)
 
-        item = item_list[0]
+        for item in item_list:
+            data = self._prepare_data(
+                lang, frankingLicense, post_customer, labelDefinition, item
+            )
 
-        data = self._prepare_data(
-            lang, frankingLicense, post_customer, labelDefinition, item
-        )
+            res = {"value": []}
 
-        res = {"value": []}
+            generate_label_url = urllib.parse.urljoin(
+                picking_carrier.postlogistics_endpoint_url, GENERATE_LABEL_PATH
+            )
+            response = requests.post(
+                url=generate_label_url,
+                headers={
+                    "Authorization": "Bearer %s" % access_token,
+                    "accept": "application/json",
+                    "content-type": "application/json",
+                },
+                data=json.dumps(data),
+                timeout=60,
+            )
 
-        generate_label_url = urllib.parse.urljoin(
-            picking_carrier.postlogistics_endpoint_url, GENERATE_LABEL_PATH
-        )
-        response = requests.post(
-            url=generate_label_url,
-            headers={
-                "Authorization": "Bearer %s" % access_token,
-                "accept": "application/json",
-                "content-type": "application/json",
-            },
-            data=json.dumps(data),
-            timeout=60,
-        )
+            if response.status_code != 200:
+                res["success"] = False
+                res["errors"] = response.content.decode("utf-8")
+                return res
 
-        if response.status_code != 200:
-            res["success"] = False
-            res["errors"] = [
-                _("Error when communicating with swisspost API: %s")
-                % response.content.decode("utf-8")
-            ]
-            return res
+            response_dict = json.loads(response.content.decode("utf-8"))
 
-        response_dict = json.loads(response.content.decode("utf-8"))
-
-        if response_dict["item"].get("errors"):
-            res["success"] = False
-            res["errors"] = []
-            for error in response_dict["item"]["errors"]:
-                res["errors"].append(
-                    _(
-                        "Swisspost API returns errors:\n"
-                        "Error code: %s\n"
-                        "Error message: %s"
+            if response_dict["item"].get("errors"):
+                # If facing an error, top all operations and return the result
+                res["success"] = False
+                res["errors"] = []
+                for error in response_dict["item"]["errors"]:
+                    res["errors"] = _("Error code: %s, Message: %s") % (
+                        error["code"],
+                        error["message"],
                     )
-                    % (error["code"], error["message"])
-                )
-            return res
+                results.append(res)
+                return results
 
-        output_format = self._get_output_format(picking).lower()
-        file_type = output_format if output_format != "spdf" else "pdf"
-        binary = base64.b64encode(bytes(response_dict["item"]["label"][0], "utf-8"))
-        res["success"] = True
-        res["value"].append(
-            {
-                "item_id": item_list[0]["itemID"],
-                "binary": binary,
-                "tracking_number": response_dict["item"]["identCode"],
-                "file_type": file_type,
-            }
-        )
-        return res
+            output_format = self._get_output_format(picking).lower()
+            file_type = output_format if output_format != "spdf" else "pdf"
+            binary = base64.b64encode(bytes(response_dict["item"]["label"][0], "utf-8"))
+            res["success"] = True
+            res["value"].append(
+                {
+                    "item_id": item_list[0]["itemID"],
+                    "binary": binary,
+                    "tracking_number": response_dict["item"]["identCode"],
+                    "file_type": file_type,
+                }
+            )
+            results.append(res)
+        return results

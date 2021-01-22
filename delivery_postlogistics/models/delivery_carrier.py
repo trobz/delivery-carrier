@@ -128,8 +128,6 @@ class DeliveryCarrier(models.Model):
         """
         for pick in pickings:
             pick._set_a_default_package()
-            shipping_labels = pick._generate_postlogistics_label()
-            for label in shipping_labels:
-                pick.attach_shipping_label(label)
+            pick._generate_postlogistics_label()
 
         return [{"exact_price": False, "tracking_number": False}]
