@@ -12,7 +12,6 @@ class PostlogisticsShippingLabel(models.Model):
     _description = "Shipping Label for Postlogistics"
 
     file_type = fields.Char(string="File type", default="pdf")
-    package_id = fields.Many2one(comodel_name="stock.quant.package", string="Pack")
     attachment_id = fields.Many2one(
         comodel_name="ir.attachment",
         string="Attachement",
