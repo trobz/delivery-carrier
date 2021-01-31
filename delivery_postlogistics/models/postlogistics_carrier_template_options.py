@@ -10,6 +10,7 @@ POSTLOGISTIC_TYPES = [
     ("basic", "Basic Service"),
     ("additional", "Additional Service"),
     ("delivery", "Delivery Instructions"),
+    ("partner_option", "Partner Option"),
 ]
 
 
@@ -19,7 +20,7 @@ class DeliveryCarrierTemplateOption(models.Model):
     _name = "postlogistics.delivery.carrier.template.option"
     _description = "Delivery carrier template option"
 
-    partner_id = fields.Many2one(comodel_name="res.partner", string="Partner Carrier")
+    partner_id = fields.Many2one(comodel_name="res.partner", string="Carrier")
     name = fields.Char(translate=True)
     code = fields.Char()
     description = fields.Char(
@@ -27,23 +28,4 @@ class DeliveryCarrierTemplateOption(models.Model):
     )
     postlogistics_type = fields.Selection(
         selection=POSTLOGISTIC_TYPES, string="PostLogistics option type",
-    )
-    # relation tables to manage compatiblity between basic services
-    # and other services
-
-    postlogistics_additonial_service_ids = fields.Many2many(
-        comodel_name="postlogistics.delivery.carrier.template.option",
-        relation="postlogistics_compatibility_service_rel",
-        column1="basic_service_id",
-        column2="service_id",
-        string="Compatible Additional Services",
-        domain=[("postlogistics_type", "=", "additional")],
-    )
-    postlogistics_delivery_instruction_ids = fields.Many2many(
-        comodel_name="postlogistics.delivery.carrier.template.option",
-        relation="postlogistics_compatibility_service_rel",
-        column1="basic_service_id",
-        column2="service_id",
-        string="Compatible Delivery Instructions",
-        domain=[("postlogistics_type", "=", "delivery")],
     )

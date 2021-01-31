@@ -93,15 +93,9 @@ class PostlogisticsWebService(object):
 
         # Phone and / or mobile should only be displayed if instruction to
         # Notify delivery by telephone is set
+        postlogistics_partner_codes = partner.postlogistics_option_ids.mapped("code")
 
-        picking_packagings = picking._get_picking_postlogistic_packages().mapped(
-            "packaging_id"
-        )
-        is_phone_required = [
-            packaging
-            for packaging in picking_packagings
-            if packaging.postlogistics_option_code == "ZAW3213"
-        ]
+        is_phone_required = "ZAW3213" in postlogistics_partner_codes
 
         if is_phone_required:
             phone = picking.delivery_phone or partner.phone
@@ -170,20 +164,15 @@ class PostlogisticsWebService(object):
         franking_license = picking.carrier_id.postlogistics_license_id
         return franking_license.number
 
-    def _prepare_attributes(
-        self, picking, package=None, pack_num=None, pack_total=None
-    ):
+    def _prepare_attributes(self, picking, pack=None, pack_num=None, pack_total=None):
         packaging = (
-            package
-            and package.packaging_id
+            pack
+            and pack.packaging_id
             or picking.carrier_id.postlogistics_default_packaging_id
         )
-        services = (
-            packaging.shipper_package_code
-            and packaging.shipper_package_code.split(",")
-            or []
-        )
-        total_weight = package.shipping_weight if package else picking.shipping_weight
+        services = packaging._get_packaging_codes()
+
+        total_weight = pack.shipping_weight if pack else picking.shipping_weight
         total_weight *= 1000
 
         if not services:
@@ -192,26 +181,32 @@ class PostlogisticsWebService(object):
             )
 
         attributes = {
-            "przl": services,
             "weight": total_weight,
         }
-        option_code = packaging.postlogistics_option_code
 
-        if option_code == "ZAW3217" and picking.delivery_fixed_date:
-            attributes["deliveryDate"] = picking.delivery_fixed_date
-        if option_code == "ZAW3218" and pack_num:
+        # Remove the services if the delivery fixed date is not set
+        if "ZAW3217" in services:
+            if picking.delivery_fixed_date:
+                attributes["deliveryDate"] = picking.delivery_fixed_date
+            else:
+                services.remove("ZAW3217")
+
+        if pack_num:
             attributes.update(
                 {
                     "parcelTotal": pack_total or len(picking.package_ids),
                     "parcelNo": pack_num,
                 }
             )
-        if option_code == "ZAW3219" and picking.delivery_place:
+        if "ZAW3219" in services and picking.delivery_place:
             attributes["deliveryPlace"] = picking.delivery_place
         if picking.carrier_id.postlogistics_proclima_logo:
             attributes["proClima"] = True
         else:
             attributes["proClima"] = False
+
+        attributes["przl"] = services
+
         return attributes
 
     def _get_itemid(self, picking, pack_no):
@@ -239,13 +234,9 @@ class PostlogisticsWebService(object):
 
     def _get_item_additional_data(self, picking, package=None):
         result = []
-        postlogistics_packaging = picking._get_picking_postlogistic_packages().mapped(
-            "packaging_id"
-        )
-        postlogistics_package_codes = postlogistics_packaging.mapped(
-            "postlogistics_option_code"
-        )
-        if set(postlogistics_package_codes) & {"BLN", "N"}:
+        packaging_codes = package and package.packaging_id._get_packaging_codes() or []
+
+        if set(packaging_codes) & {"BLN", "N"}:
             cod_attributes = self._cash_on_delivery(picking, package=package)
             result += cod_attributes
         return result

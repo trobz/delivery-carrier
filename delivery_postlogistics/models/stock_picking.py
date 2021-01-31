@@ -24,17 +24,6 @@ class StockPicking(models.Model):
         "Mobile", help="For notify delivery by telephone (ZAW3213)"
     )
 
-    def _get_picking_postlogistic_packages(self):
-        """
-        Get all the picking postlogistics service codes define in the picking
-        """
-        self.ensure_one()
-        postlogistics_packages = self._get_packages_from_picking().filtered(
-            lambda r: r.packaging_id
-            and r.packaging_id.package_carrier_type == "postlogistics"
-        )
-        return postlogistics_packages
-
     @api.onchange("carrier_id")
     def onchange_carrier_id(self):
         """ Inherit this method in your module """

@@ -10,4 +10,10 @@ class ProductPackaging(models.Model):
     package_carrier_type = fields.Selection(
         selection_add=[("postlogistics", "Postlogistics")]
     )
-    postlogistics_option_code = fields.Char("Postlogistics Option Code")
+
+    def _get_packaging_codes(self):
+        """
+        Return the list of packaging codes
+        """
+        self.ensure_one()
+        return [code.strip() for code in self.shipper_package_code.split(",")]
