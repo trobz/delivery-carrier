@@ -70,12 +70,6 @@ class StockPicking(models.Model):
         """Attach a label returned by generate_shipping_labels to a picking"""
         self.ensure_one()
         data = self.get_shipping_label_values(label)
-        if label.get("package_id"):
-            data["package_id"] = label["package_id"]
-            if label.get("tracking_number"):
-                self.env["stock.quant.package"].browse(label["package_id"]).write(
-                    {"parcel_tracking": label.get("tracking_number")}
-                )
         context_attachment = self.env.context.copy()
         # remove default_type setted for stock_picking
         # as it would try to define default value of attachement
@@ -145,8 +139,9 @@ class StockPicking(models.Model):
 
     def write_tracking_number_label(self, label_result, packages):
         """
-        if there are no pack defined, write tracking_number on picking
-        otherwise, write it on parcel_tracking field of each pack
+        If there are no pack defined, write tracking_number on picking
+        otherwise, write it on parcel_tracking field of each pack.
+        Note we can receive multiple labels for a same package
         """
 
         def info_from_label(label):
@@ -159,28 +154,20 @@ class StockPicking(models.Model):
 
         labels = []
         if not packages:
-            label = label_result["value"][0]
-            tracking_number = label["tracking_number"]
-            self.carrier_tracking_ref = tracking_number
-            info = info_from_label(label)
-            info["package_id"] = False
-            labels.append(info)
+            label = label_result[0]["value"][0]
+            self.carrier_tracking_ref = label["tracking_number"]
+            labels.append(info_from_label(label))
 
         tracking_refs = []
         for package in packages:
-            label = None
-            for search_label in label_result["value"]:
-                if package.name in search_label["item_id"].split("+")[-1]:
-                    label = search_label
-                    tracking_number = label["tracking_number"]
-                    package.parcel_tracking = tracking_number
-                    tracking_refs.append(tracking_number)
-                    break
-            if label:
-                info = info_from_label(label)
-                info["package_id"] = package.id
-                info["tracking_number"] = label["tracking_number"]
-                labels.append(info)
+            tracking_numbers = []
+            for label in label_result:
+                for label_value in label["value"]:
+                    if package.name in label_value["item_id"].split("+")[-1]:
+                        tracking_numbers.append(label_value["tracking_number"])
+                        labels.append(info_from_label(label_value))
+            package.parcel_tracking = "; ".join(tracking_numbers)
+            tracking_refs += tracking_numbers
 
         existing_tracking_ref = (
             self.carrier_tracking_ref and self.carrier_tracking_ref.split("; ") or []
@@ -200,7 +187,7 @@ class StockPicking(models.Model):
 
         if package_ids is None:
             packages = self._get_packages_from_picking()
-            packages = sorted(packages, key=attrgetter("name"))
+            packages = packages.sorted(key=attrgetter("name"))
         else:
             # restrict on the provided packages
             package_obj = self.env["stock.quant.package"]
@@ -208,14 +195,11 @@ class StockPicking(models.Model):
 
         web_service = webservice_class(company)
 
-        # Do not generate label for packages that has already done
-        todo_packages = []
-        for package in packages:
-            if not package.parcel_tracking:
-                todo_packages.append(package)
+        # Do not generate label for packages that are already done
+        packages = packages.filtered(lambda p: not p.parcel_tracking)
 
         label_results = web_service.generate_label(
-            self, todo_packages, user_lang=user.lang
+            self, packages, user_lang=user.lang
         )
 
         # Process the success packages first
@@ -228,9 +212,7 @@ class StockPicking(models.Model):
         if failed_label_results:
             self._cr.rollback()
 
-        labels = []
-        for label_result in success_label_results:
-            labels += self.write_tracking_number_label(label_result, packages)
+        labels = self.write_tracking_number_label(success_label_results, packages)
 
         if not skip_attach_file:
             for label in labels:
