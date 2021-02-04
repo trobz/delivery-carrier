@@ -126,7 +126,7 @@ class PostlogisticsWebService(object):
             "zip": partner.zip,
             "city": partner.city,
             "country": partner.country_id.code,
-            "domicilePostOffice": picking.carrier_id.postlogistics_office,
+            "domicilePostOffice": picking.carrier_id.postlogistics_office or None,
         }
         logo = picking.carrier_id.postlogistics_logo
         if logo:
@@ -181,7 +181,7 @@ class PostlogisticsWebService(object):
             )
 
         attributes = {
-            "weight": total_weight,
+            "weight": int(total_weight),
         }
 
         # Remove the services if the delivery fixed date is not set
@@ -409,7 +409,7 @@ class PostlogisticsWebService(object):
             cls.access_token_expiry = now + timedelta(seconds=response["expires_in"])
             return cls.access_token
 
-    def generate_label(self, picking, packages, user_lang=None):
+    def generate_label(self, picking, packages):
         """ Generate a label for a picking
 
         :param picking: picking browse record
@@ -432,9 +432,7 @@ class PostlogisticsWebService(object):
         access_token = self.get_access_token(picking_carrier)
 
         # get options
-        if not user_lang:
-            user_lang = "en_US"
-        lang = self._get_language(user_lang)
+        lang = self._get_language(picking.partner_id.lang)
         post_customer = self._prepare_customer(picking)
         recipient = self._prepare_recipient(picking)
         item_list = self._prepare_item_list(picking, recipient, packages)

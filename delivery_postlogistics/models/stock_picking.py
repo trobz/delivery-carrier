@@ -198,7 +198,7 @@ class StockPicking(models.Model):
         # Do not generate label for packages that are already done
         packages = packages.filtered(lambda p: not p.parcel_tracking)
 
-        label_results = web_service.generate_label(self, packages, user_lang=user.lang)
+        label_results = web_service.generate_label(self, packages)
 
         # Process the success packages first
         success_label_results = [
