@@ -75,11 +75,11 @@ class PostlogisticsWebService(object):
 
         if partner.postlogistics_notification == "email" and not partner.email:
             raise exceptions.UserError(_("Email is required for notification."))
-        if partner.postlogistics_notification == "sms" and not partner_mobile:
+        elif partner.postlogistics_notification == "sms" and not partner_mobile:
             raise exceptions.UserError(
                 _("Mobile number is required for sms notification.")
             )
-        if partner.postlogistics_notification == "phone" and not partner_phone:
+        elif partner.postlogistics_notification == "phone" and not partner_phone:
             raise exceptions.UserError(
                 _("Phone number is required for phone call notification.")
             )
@@ -90,9 +90,6 @@ class PostlogisticsWebService(object):
             "street": partner.street,
             "zip": partner.zip,
             "city": partner.city,
-            "email": partner.postlogistics_notification == "email"
-            and partner.email
-            or None,
         }
 
         if partner.country_id.code:
@@ -108,12 +105,13 @@ class PostlogisticsWebService(object):
 
         # Phone and / or mobile should only be displayed if instruction to
         # Notify delivery by telephone is set
-        if partner.postlogistics_notification == "phone":
+        if partner.postlogistics_notification == "email":
+            recipient["email"] = partner.email
+        elif partner.postlogistics_notification == "phone":
             recipient["phone"] = partner_phone
             if partner_mobile:
                 recipient["mobile"] = partner_mobile
-
-        if partner.postlogistics_notification == "sms":
+        elif partner.postlogistics_notification == "sms":
             recipient["mobile"] = partner_mobile
 
         return recipient
@@ -206,13 +204,15 @@ class PostlogisticsWebService(object):
             else:
                 services.remove("ZAW3217")
 
-        if pack_num:
-            attributes.update(
-                {
-                    "parcelTotal": (pack_total or len(picking.package_ids)) - 1,
-                    "parcelNo": pack_num - 1,
-                }
-            )
+        # parcelNo / parcelTotal cannot be used if service ZAW3218 is not activated
+        if "ZAW3218" in services:
+            if pack_total > 1:
+                attributes.update(
+                    {"parcelTotal": pack_total - 1, "parcelNo": pack_num - 1}
+                )
+            else:
+                services.remove("ZAW3218")
+
         if "ZAW3219" in services and picking.delivery_place:
             attributes["deliveryPlace"] = picking.delivery_place
         if picking.carrier_id.postlogistics_proclima_logo:
