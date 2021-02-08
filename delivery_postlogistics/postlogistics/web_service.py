@@ -70,6 +70,19 @@ class PostlogisticsWebService(object):
 
         """
         partner = picking.partner_id
+        partner_mobile = picking.delivery_mobile or partner.mobile
+        partner_phone = picking.delivery_phone or partner.phone
+
+        if partner.postlogistics_notification == "email" and not partner.email:
+            raise exceptions.UserError(_("Email is required for notification."))
+        if partner.postlogistics_notification == "sms" and not partner_mobile:
+            raise exceptions.UserError(
+                _("Mobile number is required for sms notification.")
+            )
+        if partner.postlogistics_notification == "phone" and not partner_phone:
+            raise exceptions.UserError(
+                _("Phone number is required for phone call notification.")
+            )
 
         partner_name = partner.name or partner.parent_id.name
         recipient = {
@@ -77,7 +90,9 @@ class PostlogisticsWebService(object):
             "street": partner.street,
             "zip": partner.zip,
             "city": partner.city,
-            "email": partner.email or None,
+            "email": partner.postlogistics_notification == "email"
+            and partner.email
+            or None,
         }
 
         if partner.country_id.code:
@@ -93,18 +108,13 @@ class PostlogisticsWebService(object):
 
         # Phone and / or mobile should only be displayed if instruction to
         # Notify delivery by telephone is set
-        postlogistics_partner_codes = partner.postlogistics_option_ids.mapped("code")
+        if partner.postlogistics_notification == "phone":
+            recipient["phone"] = partner_phone
+            if partner_mobile:
+                recipient["mobile"] = partner_mobile
 
-        is_phone_required = "ZAW3213" in postlogistics_partner_codes
-
-        if is_phone_required:
-            phone = picking.delivery_phone or partner.phone
-            if phone:
-                recipient["phone"] = phone
-
-            mobile = picking.delivery_mobile or partner.mobile
-            if mobile:
-                recipient["mobile"] = mobile
+        if partner.postlogistics_notification == "sms":
+            recipient["mobile"] = partner_mobile
 
         return recipient
 
@@ -180,6 +190,11 @@ class PostlogisticsWebService(object):
                 _("No Postlogistics packaging services found in this picking.")
             )
 
+        # Activate phone notification ZAW3213
+        # if phone call notification is set on partner
+        if picking.partner_id.postlogistics_notification == "phone":
+            services.append("ZAW3213")
+
         attributes = {
             "weight": int(total_weight),
         }
@@ -194,8 +209,8 @@ class PostlogisticsWebService(object):
         if pack_num:
             attributes.update(
                 {
-                    "parcelTotal": pack_total or len(picking.package_ids),
-                    "parcelNo": pack_num,
+                    "parcelTotal": (pack_total or len(picking.package_ids)) - 1,
+                    "parcelNo": pack_num - 1,
                 }
             )
         if "ZAW3219" in services and picking.delivery_place:

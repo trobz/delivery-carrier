@@ -6,6 +6,7 @@
         <field name="inherit_id" ref="delivery.view_partner_property_form" />
         <field name="arch" type="xml">
             <field name="property_delivery_carrier_id" position="after">
+                <field name="postlogistics_notification" />
                 <field
                     name="postlogistics_option_ids"
                     widget="many2many_tags"

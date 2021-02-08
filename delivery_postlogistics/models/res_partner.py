@@ -14,3 +14,13 @@ class ResPartner(models.Model):
         column2="option_id",
         string="Postlogistics Options",
     )
+
+    postlogistics_notification = fields.Selection(
+        [
+            ("disabled", "Disable"),
+            ("email", "Email"),
+            ("sms", "Mobile SMS"),
+            ("phone", "Phone Call"),
+        ],
+        default="disabled",
+    )
