@@ -17,7 +17,7 @@ class ResPartner(models.Model):
 
     postlogistics_notification = fields.Selection(
         [
-            ("disabled", "Disable"),
+            ("disabled", "Disabled"),
             ("email", "Email"),
             ("sms", "Mobile SMS"),
             ("phone", "Phone Call"),
