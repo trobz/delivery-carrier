@@ -87,7 +87,7 @@ class PostlogisticsWebService(object):
         partner_name = partner.name or partner.parent_id.name
         recipient = {
             "name1": partner_name[:35],
-            "street": partner.street[35],
+            "street": partner.street[:35],
             "zip": partner.zip[:10],
             "city": partner.city[:35],
         }
