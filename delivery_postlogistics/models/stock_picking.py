@@ -146,8 +146,16 @@ class StockPicking(models.Model):
 
         def info_from_label(label):
             tracking_number = label["tracking_number"]
+            data = base64.b64decode(label["binary"])
+            if label["file_type"] == "zpl2":
+                data = base64.b64encode(
+                    base64.b64decode(data)
+                    .decode("cp437")
+                    .replace("^XA", "^XA^CI28")
+                    .encode("utf-8")
+                )
             return {
-                "file": base64.b64decode(label["binary"]),
+                "file": data,
                 "file_type": label["file_type"],
                 "name": tracking_number + "." + label["file_type"],
             }
