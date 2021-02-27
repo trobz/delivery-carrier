@@ -100,7 +100,7 @@ class PostlogisticsWebService(object):
 
         company_partner_name = partner.commercial_company_name
         if company_partner_name and company_partner_name != partner_name:
-            recipient["name2"] = partner.parent_id.name
+            recipient["name2"] = partner.parent_id.name[:35]
             recipient["personallyAddressed"] = False
 
         # Phone and / or mobile should only be displayed if instruction to
