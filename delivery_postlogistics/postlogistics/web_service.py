@@ -248,6 +248,11 @@ class PostlogisticsWebService(object):
         return [{"Type": "NN_BETRAG", "Value": amount}]
 
     def _get_item_additional_data(self, picking, package=None):
+        if package and not package.packaging_id:
+            raise exceptions.UserError(
+                _("The package %s must have a package type.") % package.name
+            )
+
         result = []
         packaging_codes = package and package.packaging_id._get_packaging_codes() or []
 

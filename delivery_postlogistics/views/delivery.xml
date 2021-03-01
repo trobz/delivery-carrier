@@ -68,6 +68,9 @@
                                 nolabel="1"
                             />
                         </group>
+                        <group string="ZPL Patch">
+                            <field name="zpl_patch_string" />
+                        </group>
                     </group>
                 </page>
             </page>

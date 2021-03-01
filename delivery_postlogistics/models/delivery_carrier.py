@@ -88,6 +88,9 @@ class DeliveryCarrier(models.Model):
     postlogistics_license_id = fields.Many2one(
         comodel_name="postlogistics.license", string="Franking License",
     )
+    zpl_patch_string = fields.Char(
+        string="ZPL Patch String", default="^XA^CW0,E:TT0003M_.TTF^XZ^XA^CI28"
+    )
 
     @api.onchange("prod_environment")
     def onchange_prod_environment(self):
