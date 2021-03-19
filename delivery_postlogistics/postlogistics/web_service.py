@@ -483,7 +483,12 @@ class PostlogisticsWebService(object):
             if response.status_code != 200:
                 res["success"] = False
                 res["errors"] = response.content.decode("utf-8")
-                return res
+                _logger.warning(
+                    "Shipping label could not be generated.\n"
+                    "Request: %s\n"
+                    "Response: %s" % (json.dumps(data), res["errors"])
+                )
+                return [res]
 
             response_dict = json.loads(response.content.decode("utf-8"))
 
